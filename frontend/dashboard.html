@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard — BodegaOS</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<script src="js/utils.js"></script>
+<script src="js/sidebar.js"></script>
+<script>renderSidebar();</script>
+
+<div class="main">
+  <div class="topbar">
+    <h1>Dashboard</h1>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span class="badge" id="last-update">Cargando...</span>
+      <a href="reporte_utilidad.html" class="btn btn-secondary btn-sm">📈 Reporte utilidad</a>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- Fila 1: métricas principales -->
+    <div class="grid-4">
+      <div class="card"><div class="card-title">Clientes</div><div class="metric-value" id="m-clientes">—</div><div class="metric-sub">registrados</div></div>
+      <div class="card"><div class="card-title">Productos</div><div class="metric-value" id="m-productos">—</div><div class="metric-sub">activos</div></div>
+      <div class="card"><div class="card-title">Pedidos hoy</div><div class="metric-value" id="m-pedidos">—</div><div class="metric-sub">del día</div></div>
+      <div class="card"><div class="card-title">Ventas hoy</div><div class="metric-value text-accent" id="m-ventas">—</div><div class="metric-sub">soles</div></div>
+    </div>
+
+    <!-- Fila 2: utilidad -->
+    <div class="grid-4 mt-4">
+      <div class="card" style="border-left:3px solid var(--accent)">
+        <div class="card-title">Utilidad hoy</div>
+        <div class="metric-value text-accent" id="m-util-hoy">—</div>
+        <div class="metric-sub" id="m-margen-hoy">margen —</div>
+      </div>
+      <div class="card" style="border-left:3px solid var(--accent2)">
+        <div class="card-title">Utilidad del mes</div>
+        <div class="metric-value" style="color:var(--accent2)" id="m-util-mes">—</div>
+        <div class="metric-sub">acumulada</div>
+      </div>
+      <div class="card"><div class="card-title">Bajo stock</div><div class="metric-value text-danger" id="m-bajo">—</div><div class="metric-sub">productos críticos</div></div>
+      <div class="card"><div class="card-title">Mensajes</div><div class="metric-value text-warn" id="m-msgs">—</div><div class="metric-sub">sin leer</div></div>
+    </div>
+
+    <!-- Fila 3: tablas -->
+    <div class="grid-2 mt-6">
+      <div class="card">
+        <div class="card-title">Top productos vendidos</div>
+        <table style="margin-top:10px">
+          <thead><tr><th>#</th><th>Producto</th><th>Unidades</th></tr></thead>
+          <tbody id="top-table"></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-title">Top productos más rentables</div>
+        <table style="margin-top:10px">
+          <thead><tr><th>#</th><th>Producto</th><th>Utilidad</th></tr></thead>
+          <tbody id="rent-table"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Gráficas -->
+    <div class="grid-2 mt-6">
+      <div class="card">
+        <div class="card-title">Ventas últimos días</div>
+        <div id="chart-dias" style="margin-top:12px;min-height:160px"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Utilidad últimos días</div>
+        <div id="chart-util-dias" style="margin-top:12px;min-height:160px"></div>
+      </div>
+    </div>
+
+    <div class="card mt-6">
+      <div class="card-title">Ventas y utilidad por mes</div>
+      <div id="chart-meses" style="margin-top:12px;min-height:120px"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const MESES = ["","Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+
+async function loadDashboard() {
+  try {
+    const d = await apiFetch("/dashboard");
+
+    document.getElementById("m-clientes").textContent  = d.total_clientes;
+    document.getElementById("m-productos").textContent = d.total_productos;
+    document.getElementById("m-pedidos").textContent   = d.pedidos_hoy;
+    document.getElementById("m-ventas").textContent    = fmtMoney(d.ventas_hoy);
+    document.getElementById("m-util-hoy").textContent  = fmtMoney(d.utilidad_hoy);
+    document.getElementById("m-util-mes").textContent  = fmtMoney(d.utilidad_mes);
+    document.getElementById("m-bajo").textContent      = d.productos_bajo_stock;
+    document.getElementById("m-msgs").textContent      = d.mensajes_no_leidos;
+    document.getElementById("last-update").textContent = "Actualizado " + new Date().toLocaleTimeString("es-PE");
+
+    // Margen del día
+    const margenHoy = d.ventas_hoy > 0 ? Math.round(d.utilidad_hoy / d.ventas_hoy * 100) : 0;
+    document.getElementById("m-margen-hoy").textContent = `margen ${margenHoy}%`;
+
+    // Top vendidos
+    const tbody = document.getElementById("top-table");
+    tbody.innerHTML = d.top_productos.length === 0
+      ? `<tr><td colspan="3" class="text-muted" style="text-align:center;padding:16px">Sin ventas aún</td></tr>`
+      : d.top_productos.map((p,i) => `<tr><td class="mono text-muted">${i+1}</td><td>${p.nombre}</td><td class="mono text-accent">${p.total_vendido}</td></tr>`).join("");
+
+    // Top rentables
+    const tbody2 = document.getElementById("rent-table");
+    tbody2.innerHTML = d.top_rentables.length === 0
+      ? `<tr><td colspan="3" class="text-muted" style="text-align:center;padding:16px">Sin datos aún</td></tr>`
+      : d.top_rentables.map((p,i) => `<tr><td class="mono text-muted">${i+1}</td><td>${p.nombre}</td><td class="mono text-accent">${fmtMoney(p.utilidad_total)}</td></tr>`).join("");
+
+    // Gráficas
+    const dias = d.ventas_por_dia.slice(0,7).reverse();
+    renderBarChart("chart-dias",      dias.map(d=>d.dia.slice(5)), dias.map(d=>d.total),    "#00e5a0");
+    renderBarChart("chart-util-dias", dias.map(d=>d.dia.slice(5)), dias.map(d=>d.utilidad), "#0077ff");
+
+    const meses = d.ventas_por_mes.slice(-6);
+    renderBarChart("chart-meses", meses.map(m=>MESES[m.mes]), meses.map(m=>m.total), "#00e5a0", meses.map(m=>m.utilidad));
+
+  } catch(e) { toast("Error cargando dashboard: "+e.message,"error"); }
+}
+
+function renderBarChart(containerId, labels, values, color, secondValues=null) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const max = Math.max(...values, ...(secondValues||[]), 1);
+  const bars = labels.map((label, i) => {
+    const pct  = Math.round((values[i]/max)*100);
+    const pct2 = secondValues ? Math.round((secondValues[i]/max)*100) : null;
+    return `
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:40px">
+        <div style="font-size:.65rem;color:var(--text2);font-family:var(--font-mono)">${fmtMoney(values[i])}</div>
+        <div style="width:100%;background:var(--bg3);border-radius:4px;height:100px;display:flex;align-items:flex-end;overflow:hidden;position:relative">
+          <div style="width:100%;height:${pct}%;background:${color};border-radius:4px 4px 0 0;opacity:.85;transition:height .5s ease"></div>
+          ${pct2!==null?`<div style="position:absolute;bottom:0;left:0;right:0;height:${pct2}%;background:#0077ff;border-radius:4px 4px 0 0;opacity:.7;transition:height .5s ease"></div>`:''}
+        </div>
+        <div style="font-size:.7rem;color:var(--text2);font-family:var(--font-mono);white-space:nowrap">${label}</div>
+      </div>`;
+  }).join("");
+  container.innerHTML = `<div style="display:flex;gap:8px;align-items:flex-end;height:160px;padding:8px 0">${bars}</div>`;
+  if (secondValues) {
+    container.insertAdjacentHTML("beforeend",
+      `<div style="display:flex;gap:16px;margin-top:6px;font-size:.72rem;color:var(--text2)">
+        <span>🟢 Venta</span><span>🔵 Utilidad</span>
+      </div>`);
+  }
+}
+
+loadDashboard();
+setInterval(loadDashboard, 30000);
+</script>
+</body>
+</html>

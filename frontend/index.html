@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BodegaOS</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: var(--bg); flex-direction: column; gap: 32px; }
+    .hero { text-align: center; }
+    .logo { font-size: 3.5rem; font-weight: 800; color: var(--accent); letter-spacing: -2px; }
+    .tagline { color: var(--text2); font-family: var(--font-mono); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 2px; margin-top: 8px; }
+    .enter-btn { padding: 14px 40px; background: var(--accent); color: var(--bg); border: none; border-radius: 10px; font-family: var(--font-main); font-size: 1.05rem; font-weight: 800; cursor: pointer; text-decoration: none; display: inline-block; transition: background 0.2s; }
+    .enter-btn:hover { background: #00cc8e; }
+    .pills { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+    .pill { background: var(--bg2); border: 1px solid var(--border); border-radius: 20px; padding: 5px 14px; font-size: 0.8rem; color: var(--text2); }
+  </style>
+</head>
+<body>
+<script src="js/utils.js"></script>
+<div class="hero">
+  <div class="logo">BodegaOS</div>
+  <div class="tagline">Sistema de gestión para bodegas · WhatsApp &amp; Chatbot</div>
+</div>
+
+<div class="pills">
+  <span class="pill">📦 Inventario</span>
+  <span class="pill">💬 WhatsApp</span>
+  <span class="pill">🛒 Pedidos</span>
+  <span class="pill">📊 Dashboard</span>
+  <span class="pill">🤖 Chatbot</span>
+</div>
+
+<a href="dashboard.html" class="enter-btn">Ingresar al sistema →</a>
+
+<div style="font-size:0.75rem;color:var(--text2);font-family:var(--font-mono)">
+  v1.0.0 · Open Source · FastAPI + SQLite
+</div>
+</body>
+</html>

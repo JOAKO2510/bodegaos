@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pedidos — BodegaOS</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<script src="js/utils.js"></script>
+<script src="js/sidebar.js"></script>
+<script>renderSidebar();</script>
+
+<div class="main">
+  <div class="topbar">
+    <h1>Pedidos</h1>
+    <button class="btn btn-primary btn-sm" onclick="abrirNuevoPedido()">+ Nuevo pedido</button>
+  </div>
+
+  <div class="content">
+    <div class="toolbar">
+      <select class="form-control" id="filter-estado" onchange="loadPedidos()" style="width:160px">
+        <option value="">Todos los estados</option>
+        <option value="pendiente">Pendiente</option>
+        <option value="en_proceso">En proceso</option>
+        <option value="confirmado">Confirmado</option>
+        <option value="entregado">Entregado</option>
+        <option value="cancelado">Cancelado</option>
+      </select>
+    </div>
+
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Cliente</th>
+              <th>Canal</th>
+              <th>Estado</th>
+              <th>Subtotal</th>
+              <th>Descuento</th>
+              <th>Total</th>
+              <th>Total Utilidad</th>
+              <th>Fecha</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal nuevo pedido -->
+<div class="modal-overlay" id="modal-pedido">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Nuevo pedido</div>
+      <button class="modal-close" onclick="closeModal('modal-pedido')">✕</button>
+    </div>
+    <div class="form-group">
+      <label>Cliente *</label>
+      <select class="form-control" id="p-cliente">
+        <option value="">Seleccionar cliente...</option>
+      </select>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label>Canal</label>
+        <select class="form-control" id="p-canal">
+          <option value="whatsapp">WhatsApp</option>
+          <option value="web">Web</option>
+          <option value="presencial">Presencial</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Descuento (S/)</label>
+        <input class="form-control" id="p-descuento" type="number" step="0.01" value="0" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-pedido')">Cancelar</button>
+      <button class="btn btn-primary" onclick="crearPedido()">Crear pedido</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal detalle pedido -->
+<div class="modal-overlay" id="modal-detalle">
+  <div class="modal" style="width:660px;max-width:95vw">
+    <div class="modal-header">
+      <div class="modal-title" id="detalle-title">Detalle del pedido</div>
+      <button class="modal-close" onclick="closeModal('modal-detalle')">✕</button>
+    </div>
+
+    <div id="detalle-info" style="margin-bottom:16px;color:var(--text2);font-size:0.88rem"></div>
+
+    <!-- Agregar item -->
+    <div id="add-item-section" style="background:var(--bg3);border-radius:8px;padding:14px;margin-bottom:16px">
+      <div style="font-size:0.75rem;color:var(--text2);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Agregar producto</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <select class="form-control" id="item-producto" style="flex:2;min-width:160px">
+          <option value="">Seleccionar producto...</option>
+        </select>
+        <input class="form-control" id="item-cantidad" type="number" min="1" value="1" placeholder="Cant." style="width:80px" />
+        <input class="form-control" id="item-precio" type="number" step="0.01" placeholder="Precio" style="width:100px" />
+        <button class="btn btn-primary btn-sm" onclick="agregarItem()">+ Agregar</button>
+      </div>
+    </div>
+
+    <!-- Items del pedido -->
+    <div class="table-wrap" style="max-height:260px;overflow-y:auto">
+      <table>
+        <thead><tr><th>Producto</th><th>Cant.</th><th>P.Compra</th><th>P.Venta
+        </th><th>Utilidad</th><th>Subtotal</th><th></th></tr></thead>
+        <tbody id="items-tbody"></tbody>
+      </table>
+    </div>
+
+    <div style="margin-top:14px;text-align:right;font-family:var(--font-mono);font-size:0.9rem" id="totales-resumen"></div>
+
+    <div class="modal-footer" id="detalle-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-detalle')">Cerrar</button>
+      <button class="btn btn-primary" id="btn-confirmar" onclick="confirmarPedido()">✅ Confirmar pedido</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentPedidoId = null;
+let allProductos = [];
+
+async function loadPedidos() {
+  const estado = document.getElementById("filter-estado").value;
+  const url = `/pedidos/?limit=200${estado ? "&estado=" + estado : ""}`;
+  try {
+    const pedidos = await apiFetch(url);
+    renderTable(pedidos);
+  } catch (e) { toast(e.message, "error"); }
+}
+
+function renderTable(pedidos) {
+  const tbody = document.getElementById("tbody");
+  if (pedidos.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">🛒</div><p>No hay pedidos</p></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = pedidos.map(p => `
+    <tr>
+      <td class="mono">#${p.id}</td>
+      <td>${p.cliente ? p.cliente.nombre : '—'}</td>
+      <td><span class="tag tag-gray">${p.canal}</span></td>
+      <td>${estadoBadge(p.estado)}</td>
+      <td class="mono">${fmtMoney(p.subtotal)}</td>
+      <td class="mono">${fmtMoney(p.descuento)}</td>
+      <td class="mono text-accent"><strong>${fmtMoney(p.total)}</strong></td>
+      <td class="mono text-accent"><strong>${fmtMoney(p.utilidad_total)}</strong></td>
+      <td class="text-muted">${fmtDate(p.fecha_creacion)}</td>
+      <td>
+        <button class="btn btn-secondary btn-sm btn-icon" onclick="abrirDetalle(${p.id})" title="Ver/editar">📋</button>
+        ${p.estado === 'pendiente' || p.estado === 'en_proceso'
+          ? `<button class="btn btn-danger btn-sm btn-icon" onclick="cancelarPedido(${p.id})" title="Cancelar">🚫</button>`
+          : ''}
+      </td>
+    </tr>`).join("");
+}
+
+async function abrirNuevoPedido() {
+  if (allProductos.length === 0) allProductos = await apiFetch("/productos/?activo=true&limit=500");
+  const clientes = await apiFetch("/clientes/?activo=true&limit=500");
+  const sel = document.getElementById("p-cliente");
+  sel.innerHTML = '<option value="">Seleccionar cliente...</option>' +
+    clientes.map(c => `<option value="${c.id}">${c.nombre} ${c.telefono ? '('+c.telefono+')' : ''}</option>`).join("");
+  openModal("modal-pedido");
+}
+
+async function crearPedido() {
+  const clienteId = document.getElementById("p-cliente").value;
+  if (!clienteId) { toast("Selecciona un cliente", "warn"); return; }
+  const body = {
+    cliente_id: parseInt(clienteId),
+    canal: document.getElementById("p-canal").value,
+    descuento: parseFloat(document.getElementById("p-descuento").value) || 0,
+  };
+  try {
+    const p = await apiFetch("/pedidos/", { method: "POST", body: JSON.stringify(body) });
+    toast("Pedido #" + p.id + " creado ✓");
+    closeModal("modal-pedido");
+    loadPedidos();
+    abrirDetalle(p.id);
+  } catch (e) { toast(e.message, "error"); }
+}
+
+async function abrirDetalle(pedidoId) {
+  currentPedidoId = pedidoId;
+  if (allProductos.length === 0) allProductos = await apiFetch("/productos/?activo=true&limit=500");
+
+  // Poblar selector de productos
+  const sel = document.getElementById("item-producto");
+  sel.innerHTML = '<option value="">Seleccionar producto...</option>' +
+    allProductos.map(p => `<option value="${p.id}" data-precio="${p.precio_minorista}">${p.nombre} (stock: ${p.stock})</option>`).join("");
+
+  sel.addEventListener("change", function() {
+    const opt = this.options[this.selectedIndex];
+    document.getElementById("item-precio").value = opt.dataset.precio || "";
+  });
+
+  await refreshDetalle();
+  openModal("modal-detalle");
+}
+
+async function refreshDetalle() {
+  const p = await apiFetch(`/pedidos/${currentPedidoId}`);
+  document.getElementById("detalle-title").textContent = `Pedido #${p.id} — ${estadoBadge(p.estado)}`;
+  document.getElementById("detalle-info").textContent =
+    `Cliente: ${p.cliente ? p.cliente.nombre : '—'} | Canal: ${p.canal} | Fecha: ${fmtDate(p.fecha_creacion)}`;
+
+  const editable = ["pendiente", "en_proceso"].includes(p.estado);
+  document.getElementById("add-item-section").style.display = editable ? "block" : "none";
+  document.getElementById("btn-confirmar").style.display = editable ? "inline-flex" : "none";
+
+  const tbody = document.getElementById("items-tbody");
+  if (p.detalles.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" class="text-muted" style="text-align:center;padding:20px">Sin productos agregados</td></tr>`;
+  } else {
+    tbody.innerHTML = p.detalles.map(d => `
+      <tr>
+        <td>${d.producto ? d.producto.nombre : d.producto_id}</td>
+        <td class="mono">${d.cantidad}</td>
+        <td class="mono">${fmtMoney(d.precio_compra)}</td>
+        <td class="mono">${fmtMoney(d.precio_unitario)}</td>
+         <td class="mono">${fmtMoney(d.utilidad_subtotal)}</td>
+        <td class="mono text-accent">${fmtMoney(d.subtotal)}</td>
+        <td>${editable ? `<button class="btn btn-danger btn-sm btn-icon" onclick="eliminarItem(${d.id})">🗑</button>` : ''}</td>
+      </tr>`).join("");
+  }
+
+  document.getElementById("totales-resumen").innerHTML =
+    `<span class="text-muted">Subtotal: ${fmtMoney(p.subtotal)}</span> &nbsp;
+     <span class="text-muted">Descuento: ${fmtMoney(p.descuento)}</span> &nbsp;
+     <strong class="text-accent">Total: ${fmtMoney(p.total)}</strong>`;
+}
+
+async function agregarItem() {
+  const prodId = document.getElementById("item-producto").value;
+  const cantidad = parseInt(document.getElementById("item-cantidad").value);
+  const precio = parseFloat(document.getElementById("item-precio").value);
+  if (!prodId) { toast("Selecciona un producto", "warn"); return; }
+  if (!cantidad || cantidad < 1) { toast("Ingresa una cantidad válida", "warn"); return; }
+  if (!precio || precio <= 0) { toast("Ingresa un precio válido", "warn"); return; }
+  try {
+    await apiFetch(`/pedidos/${currentPedidoId}/items`, {
+      method: "POST",
+      body: JSON.stringify({ producto_id: parseInt(prodId), cantidad, precio_unitario: precio }),
+    });
+    toast("Producto agregado ✓");
+    refreshDetalle();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+async function eliminarItem(detalleId) {
+  try {
+    await apiFetch(`/pedidos/${currentPedidoId}/items/${detalleId}`, { method: "DELETE" });
+    toast("Producto eliminado");
+    refreshDetalle();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+async function confirmarPedido() {
+  if (!confirm("¿Confirmar el pedido? Se descontará el stock de los productos.")) return;
+  try {
+    await apiFetch(`/pedidos/${currentPedidoId}/confirmar`, { method: "POST" });
+    toast("Pedido confirmado ✓ Stock descontado");
+    refreshDetalle();
+    loadPedidos();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+async function cancelarPedido(id) {
+  if (!confirm("¿Cancelar este pedido?")) return;
+  try {
+    await apiFetch(`/pedidos/${id}`, { method: "PUT", body: JSON.stringify({ estado: "cancelado" }) });
+    toast("Pedido cancelado");
+    loadPedidos();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+loadPedidos();
+</script>
+</body>
+</html>

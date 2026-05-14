@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Clientes — BodegaOS</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<script src="js/utils.js"></script>
+<script src="js/sidebar.js"></script>
+<script>renderSidebar();</script>
+
+<div class="main">
+  <div class="topbar">
+    <h1>Clientes</h1>
+    <button class="btn btn-primary btn-sm" onclick="nuevoCliente()">+ Nuevo cliente</button>
+  </div>
+
+  <div class="content">
+    <div class="toolbar">
+      <div class="search-bar">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="search-input" placeholder="Buscar por nombre, teléfono o correo..." oninput="filterTable()" />
+      </div>
+      <select class="form-control" id="filter-tipo" onchange="filterTable()" style="width:160px">
+        <option value="">Todos los tipos</option>
+        <option value="minorista">Minorista</option>
+        <option value="mayorista">Mayorista</option>
+      </select>
+    </div>
+
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Nombre</th>
+              <th>Teléfono</th>
+              <th>Correo</th>
+              <th>Dirección</th>
+              <th>Tipo</th>
+              <th>Registro</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal crear / editar -->
+<div class="modal-overlay" id="modal-cliente">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">Nuevo cliente</div>
+      <button class="modal-close" onclick="closeModal('modal-cliente')">✕</button>
+    </div>
+    <input type="hidden" id="edit-id" />
+    <div class="form-group">
+      <label>Nombre *</label>
+      <input class="form-control" id="f-nombre" placeholder="María García" />
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label>Teléfono</label>
+        <input class="form-control" id="f-telefono" placeholder="51987654321" />
+      </div>
+      <div class="form-group">
+        <label>Correo</label>
+        <input class="form-control" id="f-correo" type="email" placeholder="correo@ejemplo.com" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Dirección</label>
+      <input class="form-control" id="f-direccion" placeholder="Av. Lima 123" />
+    </div>
+    <div class="form-group">
+      <label>Tipo de cliente</label>
+      <select class="form-control" id="f-tipo">
+        <option value="minorista">Minorista</option>
+        <option value="mayorista">Mayorista</option>
+      </select>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-cliente')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarCliente()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal pedidos del cliente -->
+<div class="modal-overlay" id="modal-pedidos">
+  <div class="modal" style="width:600px;max-width:95vw">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-pedidos-title">Pedidos del cliente</div>
+      <button class="modal-close" onclick="closeModal('modal-pedidos')">✕</button>
+    </div>
+    <div class="table-wrap" style="max-height:400px;overflow-y:auto">
+      <table>
+        <thead><tr><th>ID</th><th>Estado</th><th>Canal</th><th>Total</th><th>Fecha</th></tr></thead>
+        <tbody id="pedidos-cliente-tbody"></tbody>
+      </table>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-pedidos')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let allClientes = [];
+
+async function loadClientes() {
+  try {
+    allClientes = await apiFetch("/clientes/?limit=500");
+    renderTable(allClientes);
+  } catch (e) {
+    toast("Error cargando clientes: " + e.message, "error");
+  }
+}
+
+function filterTable() {
+  const q = document.getElementById("search-input").value.toLowerCase();
+  const tipo = document.getElementById("filter-tipo").value;
+  const filtered = allClientes.filter(c => {
+    const matchQ = c.nombre.toLowerCase().includes(q) ||
+      (c.telefono || "").includes(q) ||
+      (c.correo || "").toLowerCase().includes(q);
+    const matchTipo = !tipo || c.tipo_cliente === tipo;
+    return matchQ && matchTipo;
+  });
+  renderTable(filtered);
+}
+
+function renderTable(clientes) {
+  const tbody = document.getElementById("tbody");
+  if (clientes.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">👥</div><p>No se encontraron clientes</p></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = clientes.map(c => `
+    <tr>
+      <td class="mono text-muted">#${c.id}</td>
+      <td><strong>${c.nombre}</strong></td>
+      <td class="mono">${c.telefono || '—'}</td>
+      <td>${c.correo || '—'}</td>
+      <td>${c.direccion || '—'}</td>
+      <td>${estadoBadge(c.tipo_cliente)}</td>
+      <td class="text-muted">${fmtDateShort(c.fecha_creacion)}</td>
+      <td>
+        <button class="btn btn-secondary btn-sm btn-icon" onclick='editarCliente(${JSON.stringify(c)})' title="Editar">✏️</button>
+        <button class="btn btn-secondary btn-sm btn-icon" onclick="verPedidos(${c.id},'${c.nombre}')" title="Ver pedidos">🛒</button>
+      </td>
+    </tr>`).join("");
+}
+
+function nuevoCliente() {
+  document.getElementById("modal-title").textContent = "Nuevo cliente";
+  ["edit-id","f-nombre","f-telefono","f-correo","f-direccion"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("f-tipo").value = "minorista";
+  openModal("modal-cliente");
+}
+
+function editarCliente(c) {
+  document.getElementById("modal-title").textContent = "Editar cliente";
+  document.getElementById("edit-id").value = c.id;
+  document.getElementById("f-nombre").value = c.nombre;
+  document.getElementById("f-telefono").value = c.telefono || "";
+  document.getElementById("f-correo").value = c.correo || "";
+  document.getElementById("f-direccion").value = c.direccion || "";
+  document.getElementById("f-tipo").value = c.tipo_cliente;
+  openModal("modal-cliente");
+}
+
+async function guardarCliente() {
+  const id = document.getElementById("edit-id").value;
+  const body = {
+    nombre:       document.getElementById("f-nombre").value.trim(),
+    telefono:     document.getElementById("f-telefono").value.trim() || null,
+    correo:       document.getElementById("f-correo").value.trim() || null,
+    direccion:    document.getElementById("f-direccion").value.trim() || null,
+    tipo_cliente: document.getElementById("f-tipo").value,
+  };
+  if (!body.nombre) { toast("El nombre es requerido", "warn"); return; }
+  try {
+    if (id) {
+      await apiFetch(`/clientes/${id}`, { method: "PUT", body: JSON.stringify(body) });
+      toast("Cliente actualizado ✓");
+    } else {
+      await apiFetch("/clientes/", { method: "POST", body: JSON.stringify(body) });
+      toast("Cliente creado ✓");
+    }
+    closeModal("modal-cliente");
+    loadClientes();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+async function verPedidos(clienteId, nombre) {
+  document.getElementById("modal-pedidos-title").textContent = `Pedidos de ${nombre}`;
+  const tbody = document.getElementById("pedidos-cliente-tbody");
+  tbody.innerHTML = `<tr><td colspan="5" class="text-muted">Cargando...</td></tr>`;
+  openModal("modal-pedidos");
+  try {
+    const pedidos = await apiFetch(`/pedidos/?cliente_id=${clienteId}&limit=50`);
+    if (pedidos.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><p>Sin pedidos aún</p></div></td></tr>`;
+    } else {
+      tbody.innerHTML = pedidos.map(p => `
+        <tr>
+          <td class="mono">#${p.id}</td>
+          <td>${estadoBadge(p.estado)}</td>
+          <td>${p.canal}</td>
+          <td class="mono text-accent">${fmtMoney(p.total)}</td>
+          <td class="text-muted">${fmtDate(p.fecha_creacion)}</td>
+        </tr>`).join("");
+    }
+  } catch (e) { toast(e.message, "error"); }
+}
+
+loadClientes();
+</script>
+</body>
+</html>

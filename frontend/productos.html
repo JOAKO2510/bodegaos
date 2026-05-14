@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Productos — BodegaOS</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    .smart-select { position: relative; }
+    .smart-select input { width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-family:var(--font-main);font-size:.9rem;padding:9px 36px 9px 13px;outline:none;cursor:pointer;transition:border-color .2s; }
+    .smart-select input:focus { border-color:var(--accent); }
+    .smart-select .ss-arrow { position:absolute;right:11px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:.8rem;pointer-events:none; }
+    .smart-select .ss-dropdown { display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--bg2);border:1px solid var(--accent);border-radius:8px;z-index:999;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.5); }
+    .smart-select .ss-dropdown.open { display:block; }
+    .smart-select .ss-option { padding:9px 14px;cursor:pointer;font-size:.88rem;color:var(--text);border-bottom:1px solid var(--border);transition:background .15s;display:flex;align-items:center;gap:8px; }
+    .smart-select .ss-option:last-child { border-bottom:none; }
+    .smart-select .ss-option:hover { background:rgba(0,229,160,.1);color:var(--accent); }
+    .smart-select .ss-empty { padding:10px 14px;color:var(--text2);font-size:.85rem; }
+    .smart-select .ss-new { padding:9px 14px;cursor:pointer;font-size:.85rem;color:var(--accent);border-top:1px solid var(--border);font-weight:700; }
+    .smart-select .ss-new:hover { background:rgba(0,229,160,.08); }
+    .margen-pill { font-size:.7rem;font-family:var(--font-mono);padding:2px 7px;border-radius:10px;font-weight:700; }
+    .margen-ok  { background:rgba(0,229,160,.15);color:var(--accent); }
+    .margen-warn{ background:rgba(255,179,71,.15);color:var(--warn); }
+    .margen-bad { background:rgba(255,77,109,.15);color:var(--danger); }
+  </style>
+</head>
+<body>
+<script src="js/utils.js"></script>
+<script src="js/sidebar.js"></script>
+<script>renderSidebar();</script>
+
+<div class="main">
+  <div class="topbar">
+    <h1>Productos</h1>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-secondary btn-sm" onclick="abrirModalCategorias()">🏷 Categorías</button>
+      <button class="btn btn-primary btn-sm" onclick="abrirNuevoProducto()">+ Nuevo producto</button>
+    </div>
+  </div>
+
+  <div class="content">
+    <div class="toolbar">
+      <div class="search-bar">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="search-input" placeholder="Buscar producto..." oninput="filterTable()" />
+      </div>
+      <select class="form-control" id="filter-categoria" onchange="filterTable()" style="width:180px">
+        <option value="">Todas las categorías</option>
+      </select>
+      <label style="display:flex;align-items:center;gap:6px;color:var(--text2);font-size:.85rem;cursor:pointer">
+        <input type="checkbox" id="filter-bajo-stock" onchange="filterTable()" /> Solo bajo stock
+      </label>
+    </div>
+
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Código</th><th>Nombre</th><th>Categoría</th>
+              <th>P. Compra</th><th>P. Minorista</th><th>P. Mayorista</th>
+              <th>Margen Min.</th><th>Stock</th><th>Estado</th><th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Crear / Editar producto -->
+<div class="modal-overlay" id="modal-producto">
+  <div class="modal" style="width:540px">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">Nuevo producto</div>
+      <button class="modal-close" onclick="closeModal('modal-producto')">✕</button>
+    </div>
+    <input type="hidden" id="edit-id" />
+    <div class="grid-2">
+      <div class="form-group">
+        <label>Código *</label>
+        <input class="form-control" id="f-codigo" placeholder="ACE-PRI-VEG-1L" />
+      </div>
+      <div class="form-group">
+        <label>Categoría</label>
+        <div class="smart-select" id="ss-wrapper">
+          <input type="text" id="ss-input" placeholder="Busca o escribe..." autocomplete="off" oninput="ssFilter()" onfocus="ssOpen()" />
+          <span class="ss-arrow">▾</span>
+          <div class="ss-dropdown" id="ss-dropdown"></div>
+        </div>
+        <input type="hidden" id="f-categoria-id" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Nombre *</label>
+      <input class="form-control" id="f-nombre" placeholder="Aceite Primor Vegetal 1L" />
+    </div>
+    <div class="form-group">
+      <label>Descripción</label>
+      <input class="form-control" id="f-descripcion" placeholder="Opcional..." />
+    </div>
+
+    <!-- Precios -->
+    <div style="background:var(--bg3);border-radius:8px;padding:14px;margin-bottom:12px">
+      <div style="font-size:.72rem;color:var(--text2);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">💰 Precios</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+        <div class="form-group" style="margin:0">
+          <label>Precio compra *</label>
+          <input class="form-control" id="f-precio-compra" type="number" step="0.01" placeholder="0.00" oninput="calcMargen()" />
+        </div>
+        <div class="form-group" style="margin:0">
+          <label>Precio minorista</label>
+          <input class="form-control" id="f-precio-min" type="number" step="0.01" placeholder="0.00" oninput="calcMargen()" />
+        </div>
+        <div class="form-group" style="margin:0">
+          <label>Precio mayorista</label>
+          <input class="form-control" id="f-precio-may" type="number" step="0.01" placeholder="0.00" />
+        </div>
+      </div>
+      <!-- Preview margen en tiempo real -->
+      <div id="margen-preview" style="margin-top:10px;font-size:.8rem;color:var(--text2)"></div>
+    </div>
+
+    <div class="grid-2">
+      <div class="form-group">
+        <label>Stock inicial</label>
+        <input class="form-control" id="f-stock" type="number" placeholder="0" />
+      </div>
+      <div class="form-group">
+        <label>Stock mínimo</label>
+        <input class="form-control" id="f-stock-min" type="number" placeholder="5" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-producto')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarProducto()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Ajustar stock -->
+<div class="modal-overlay" id="modal-stock">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Ajustar stock</div>
+      <button class="modal-close" onclick="closeModal('modal-stock')">✕</button>
+    </div>
+    <input type="hidden" id="stock-producto-id" />
+    <p id="stock-nombre" style="color:var(--text2);margin-bottom:16px;font-size:.9rem"></p>
+    <div class="form-group">
+      <label>Tipo de movimiento</label>
+      <select class="form-control" id="stock-tipo">
+        <option value="entrada">Entrada (reposición)</option>
+        <option value="salida">Salida (manual)</option>
+        <option value="ajuste">Ajuste</option>
+        <option value="devolucion">Devolución</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Cantidad</label>
+      <input class="form-control" id="stock-cantidad" type="number" min="1" placeholder="1" />
+    </div>
+    <div class="form-group">
+      <label>Motivo</label>
+      <input class="form-control" id="stock-motivo" placeholder="Descripción..." />
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-stock')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarMovimiento()">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Categorías -->
+<div class="modal-overlay" id="modal-categorias">
+  <div class="modal" style="width:520px">
+    <div class="modal-header">
+      <div class="modal-title">🏷 Categorías</div>
+      <button class="modal-close" onclick="closeModal('modal-categorias')">✕</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <input class="form-control" id="nueva-cat-emoji" placeholder="📦" style="width:60px;text-align:center" />
+      <input class="form-control" id="nueva-cat-nombre" placeholder="Nombre de categoría..." style="flex:1"
+        onkeydown="if(event.key==='Enter')crearCategoria()" />
+      <button class="btn btn-primary btn-sm" onclick="crearCategoria()">+ Agregar</button>
+    </div>
+    <div class="table-wrap" style="max-height:320px;overflow-y:auto">
+      <table>
+        <thead><tr><th>Emoji</th><th>Nombre</th><th>Productos</th><th></th></tr></thead>
+        <tbody id="cat-tbody"></tbody>
+      </table>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-categorias')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let allProductos = [], allCategorias = [];
+
+async function loadAll() {
+  [allCategorias, allProductos] = await Promise.all([
+    apiFetch("/categorias/"),
+    apiFetch("/productos/?limit=500"),
+  ]);
+  populateFiltroCategoria();
+  renderTable(allProductos);
+  ssRenderAll();
+}
+
+function populateFiltroCategoria() {
+  const sel = document.getElementById("filter-categoria");
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Todas las categorías</option>' +
+    allCategorias.map(c => `<option value="${c.id}" ${c.id==cur?'selected':''}>${c.emoji} ${c.nombre}</option>`).join("");
+}
+
+function filterTable() {
+  const q    = document.getElementById("search-input").value.toLowerCase();
+  const cat  = document.getElementById("filter-categoria").value;
+  const bajo = document.getElementById("filter-bajo-stock").checked;
+  renderTable(allProductos.filter(p =>
+    (p.nombre.toLowerCase().includes(q) || p.codigo.toLowerCase().includes(q)) &&
+    (!cat  || String(p.categoria_id) === cat) &&
+    (!bajo || p.stock <= p.stock_minimo)
+  ));
+}
+
+function margenClass(pct) {
+  if (pct >= 20) return "margen-ok";
+  if (pct >= 10) return "margen-warn";
+  return "margen-bad";
+}
+
+function renderTable(productos) {
+  const tbody = document.getElementById("tbody");
+  if (!productos.length) {
+    tbody.innerHTML = `<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">📦</div><p>No se encontraron productos</p></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = productos.map(p => {
+    const cat = allCategorias.find(c => c.id === p.categoria_id);
+    const catLabel = cat ? `<span class="tag tag-gray">${cat.emoji} ${cat.nombre}</span>` : '—';
+    const stockClass = p.stock <= p.stock_minimo ? "text-danger" : p.stock <= p.stock_minimo*2 ? "text-warn" : "text-accent";
+    const utilMin  = p.utilidad_minorista ?? (p.precio_minorista - p.precio_compra);
+    const margenPct= p.precio_minorista > 0 ? Math.round(utilMin / p.precio_minorista * 100) : 0;
+    return `<tr>
+      <td class="mono">${p.codigo}</td>
+      <td><strong>${p.nombre}</strong>${p.descripcion?`<br><small class="text-muted">${p.descripcion}</small>`:''}</td>
+      <td>${catLabel}</td>
+      <td class="mono text-muted">${fmtMoney(p.precio_compra)}</td>
+      <td class="mono">${fmtMoney(p.precio_minorista)}</td>
+      <td class="mono">${fmtMoney(p.precio_mayorista)}</td>
+      <td><span class="margen-pill ${margenClass(margenPct)}">${margenPct}%</span></td>
+      <td class="mono ${stockClass}">${p.stock}<small class="text-muted"> /min ${p.stock_minimo}</small></td>
+      <td>${estadoBadge(p.activo?'activo':'inactivo')}</td>
+      <td>
+        <button class="btn btn-secondary btn-sm btn-icon" onclick='editarProducto(${JSON.stringify(p)})'>✏️</button>
+        <button class="btn btn-secondary btn-sm btn-icon" onclick='abrirStock(${p.id},"${p.nombre}")'>📦</button>
+        <button class="btn btn-danger btn-sm btn-icon" onclick="toggleActivo(${p.id},${p.activo})">${p.activo?'🚫':'✅'}</button>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+// ── Preview margen en tiempo real ─────────────────────────────
+function calcMargen() {
+  const compra = parseFloat(document.getElementById("f-precio-compra").value) || 0;
+  const min    = parseFloat(document.getElementById("f-precio-min").value) || 0;
+  const preview= document.getElementById("margen-preview");
+  if (compra > 0 && min > 0) {
+    const util = min - compra;
+    const pct  = Math.round(util / min * 100);
+    const cls  = margenClass(pct);
+    const color= pct>=20?"var(--accent)":pct>=10?"var(--warn)":"var(--danger)";
+    preview.innerHTML = `Utilidad minorista: <strong style="color:${color}">S/ ${util.toFixed(2)} (${pct}%)</strong>`;
+  } else {
+    preview.innerHTML = "";
+  }
+}
+
+// ── Smart Select ───────────────────────────────────────────────
+function ssRenderAll(query="") {
+  const dropdown = document.getElementById("ss-dropdown");
+  const q = query.toLowerCase();
+  const filtered = allCategorias.filter(c => c.activo && c.nombre.toLowerCase().includes(q));
+  let html = filtered.map(c =>
+    `<div class="ss-option" onclick="ssSelect(${c.id},'${c.emoji} ${c.nombre}')"><span>${c.emoji}</span><span>${c.nombre}</span></div>`
+  ).join("");
+  if (!filtered.length) html = `<div class="ss-empty">Sin resultados</div>`;
+  const existe = allCategorias.some(c => c.nombre.toLowerCase() === q);
+  if (query && !existe)
+    html += `<div class="ss-new" onclick="ssCrearYSeleccionar('${query}')">+ Crear categoría "${query}"</div>`;
+  dropdown.innerHTML = html;
+}
+function ssFilter() { ssRenderAll(document.getElementById("ss-input").value); document.getElementById("ss-dropdown").classList.add("open"); if(!document.getElementById("ss-input").value) document.getElementById("f-categoria-id").value=""; }
+function ssOpen()   { ssRenderAll(document.getElementById("ss-input").value); document.getElementById("ss-dropdown").classList.add("open"); }
+function ssSelect(id,label) { document.getElementById("f-categoria-id").value=id; document.getElementById("ss-input").value=label; document.getElementById("ss-dropdown").classList.remove("open"); }
+function ssClear()  { document.getElementById("f-categoria-id").value=""; document.getElementById("ss-input").value=""; }
+async function ssCrearYSeleccionar(nombre) {
+  try {
+    const nueva = await apiFetch("/categorias/", { method:"POST", body:JSON.stringify({nombre:nombre.trim(),emoji:"📦"}) });
+    allCategorias.push(nueva); populateFiltroCategoria(); ssSelect(nueva.id,`${nueva.emoji} ${nueva.nombre}`);
+    toast(`Categoría "${nueva.nombre}" creada ✓`);
+  } catch(e) { toast(e.message,"error"); }
+}
+document.addEventListener("click", e => { if(!e.target.closest("#ss-wrapper")) document.getElementById("ss-dropdown").classList.remove("open"); });
+
+// ── CRUD ───────────────────────────────────────────────────────
+function abrirNuevoProducto() {
+  document.getElementById("modal-title").textContent = "Nuevo producto";
+  ["edit-id","f-codigo","f-nombre","f-descripcion","f-precio-compra","f-precio-min","f-precio-may","f-stock","f-stock-min"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("margen-preview").innerHTML = "";
+  ssClear(); openModal("modal-producto");
+}
+
+function editarProducto(p) {
+  document.getElementById("modal-title").textContent = "Editar producto";
+  document.getElementById("edit-id").value          = p.id;
+  document.getElementById("f-codigo").value         = p.codigo;
+  document.getElementById("f-nombre").value         = p.nombre;
+  document.getElementById("f-descripcion").value    = p.descripcion||"";
+  document.getElementById("f-precio-compra").value  = p.precio_compra;
+  document.getElementById("f-precio-min").value     = p.precio_minorista;
+  document.getElementById("f-precio-may").value     = p.precio_mayorista;
+  document.getElementById("f-stock").value          = p.stock;
+  document.getElementById("f-stock-min").value      = p.stock_minimo;
+  calcMargen();
+  const cat = allCategorias.find(c=>c.id===p.categoria_id);
+  cat ? ssSelect(cat.id,`${cat.emoji} ${cat.nombre}`) : ssClear();
+  openModal("modal-producto");
+}
+
+async function guardarProducto() {
+  const id = document.getElementById("edit-id").value;
+  const catId = document.getElementById("f-categoria-id").value;
+  const body = {
+    codigo:           document.getElementById("f-codigo").value.trim(),
+    nombre:           document.getElementById("f-nombre").value.trim(),
+    descripcion:      document.getElementById("f-descripcion").value.trim()||null,
+    categoria_id:     catId?parseInt(catId):null,
+    precio_compra:    parseFloat(document.getElementById("f-precio-compra").value)||0,
+    precio_minorista: parseFloat(document.getElementById("f-precio-min").value)||0,
+    precio_mayorista: parseFloat(document.getElementById("f-precio-may").value)||0,
+    stock:            parseInt(document.getElementById("f-stock").value)||0,
+    stock_minimo:     parseInt(document.getElementById("f-stock-min").value)||5,
+  };
+  if (!body.codigo||!body.nombre) { toast("Código y nombre son requeridos","warn"); return; }
+  try {
+    if (id) { await apiFetch(`/productos/${id}`,{method:"PUT",body:JSON.stringify(body)}); toast("Producto actualizado ✓"); }
+    else    { await apiFetch("/productos/",{method:"POST",body:JSON.stringify(body)}); toast("Producto creado ✓"); }
+    closeModal("modal-producto"); loadAll();
+  } catch(e) { toast(e.message,"error"); }
+}
+
+async function toggleActivo(id,activo) {
+  try { await apiFetch(`/productos/${id}`,{method:"PUT",body:JSON.stringify({activo:!activo})}); toast(activo?"Producto desactivado":"Producto activado"); loadAll(); }
+  catch(e) { toast(e.message,"error"); }
+}
+
+function abrirStock(id,nombre) {
+  document.getElementById("stock-producto-id").value=id;
+  document.getElementById("stock-nombre").textContent="Producto: "+nombre;
+  document.getElementById("stock-cantidad").value="";
+  document.getElementById("stock-motivo").value="";
+  openModal("modal-stock");
+}
+
+async function guardarMovimiento() {
+  const id = document.getElementById("stock-producto-id").value;
+  const body = { producto_id:parseInt(id), tipo_movimiento:document.getElementById("stock-tipo").value, cantidad:parseInt(document.getElementById("stock-cantidad").value), motivo:document.getElementById("stock-motivo").value||null };
+  if (!body.cantidad||body.cantidad<1) { toast("Ingresa una cantidad válida","warn"); return; }
+  try { await apiFetch(`/productos/${id}/movimiento`,{method:"POST",body:JSON.stringify(body)}); toast("Movimiento registrado ✓"); closeModal("modal-stock"); loadAll(); }
+  catch(e) { toast(e.message,"error"); }
+}
+
+// ── Categorías ─────────────────────────────────────────────────
+async function abrirModalCategorias() { openModal("modal-categorias"); renderCatTabla(); }
+function renderCatTabla() {
+  document.getElementById("cat-tbody").innerHTML = allCategorias.map(c => {
+    const total = allProductos.filter(p=>p.categoria_id===c.id).length;
+    return `<tr><td style="text-align:center;font-size:1.2rem">${c.emoji}</td><td><strong>${c.nombre}</strong></td><td class="mono text-accent">${total}</td>
+      <td><button class="btn btn-danger btn-sm btn-icon" onclick="toggleCat(${c.id},${c.activo})">${c.activo?'🚫':'✅'}</button></td></tr>`;
+  }).join("");
+}
+async function crearCategoria() {
+  const nombre = document.getElementById("nueva-cat-nombre").value.trim();
+  const emoji  = document.getElementById("nueva-cat-emoji").value.trim()||"📦";
+  if (!nombre) { toast("Escribe un nombre","warn"); return; }
+  try { const nueva=await apiFetch("/categorias/",{method:"POST",body:JSON.stringify({nombre,emoji})}); allCategorias.push(nueva); document.getElementById("nueva-cat-nombre").value=""; document.getElementById("nueva-cat-emoji").value=""; populateFiltroCategoria(); renderCatTabla(); toast(`Categoría "${nueva.nombre}" creada ✓`); }
+  catch(e) { toast(e.message,"error"); }
+}
+async function toggleCat(id,activo) {
+  try { await apiFetch(`/categorias/${id}`,{method:"PUT",body:JSON.stringify({activo:!activo})}); const idx=allCategorias.findIndex(c=>c.id===id); if(idx>=0) allCategorias[idx].activo=!activo; populateFiltroCategoria(); renderCatTabla(); }
+  catch(e) { toast(e.message,"error"); }
+}
+
+loadAll();
+</script>
+</body>
+</html>

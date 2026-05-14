@@ -1,0 +1,297 @@
+  <!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reporte Utilidad — BodegaOS</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<script src="js/utils.js"></script>
+<script src="js/sidebar.js"></script>
+<script>renderSidebar();</script>
+
+<div class="main">
+  <div class="topbar"><h1>📈 Reporte de Utilidad</h1></div>
+
+  <div class="content">
+
+    <!-- Filtros -->
+    <div class="card" style="margin-bottom:20px">
+      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+        <div class="form-group" style="margin:0">
+          <label>Desde</label>
+          <input class="form-control" type="date" id="f-desde" style="width:155px" />
+        </div>
+        <div class="form-group" style="margin:0">
+          <label>Hasta</label>
+          <input class="form-control" type="date" id="f-hasta" style="width:155px" />
+        </div>
+        <button class="btn btn-primary"   onclick="loadReporte()">Generar reporte</button>
+        <button class="btn btn-secondary" onclick="setMesActual()">Este mes</button>
+        <button class="btn btn-secondary" onclick="setSemana()">Esta semana</button>
+        <button class="btn btn-secondary" onclick="setUltimos7()">Últimos 7 días</button>
+        <button class="btn btn-secondary" onclick="setUltimos30()">Últimos 30 días</button>
+        <button class="btn btn-secondary" onclick="setHoy()">Solo hoy</button>
+      </div>
+    </div>
+
+    <!-- Resumen -->
+    <div class="grid-3" id="resumen-grid" style="margin-bottom:20px;display:none">
+      <div class="card" style="border-left:3px solid var(--accent)">
+        <div class="card-title">Total ventas</div>
+        <div class="metric-value text-accent" id="r-ventas">—</div>
+      </div>
+      <div class="card" style="border-left:3px solid var(--accent2)">
+        <div class="card-title">Total utilidad</div>
+        <div class="metric-value" style="color:var(--accent2)" id="r-utilidad">—</div>
+      </div>
+      <div class="card" style="border-left:3px solid var(--warn)">
+        <div class="card-title">Margen promedio</div>
+        <div class="metric-value text-warn" id="r-margen">—</div>
+      </div>
+    </div>
+
+    <!-- Botones exportar -->
+    <div id="export-bar" style="display:none;margin-bottom:14px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" onclick="exportarCSV()">⬇ Exportar CSV</button>
+        <button class="btn btn-secondary btn-sm" onclick="exportarPDF()">🖨 Exportar PDF</button>
+        <span id="export-info" style="font-size:.8rem;color:var(--text2)"></span>
+      </div>
+    </div>
+
+    <!-- Tabla -->
+    <div class="card" id="tabla-card" style="display:none">
+      <div class="table-wrap">
+        <table id="tabla-reporte">
+          <thead>
+            <tr>
+              <th>Pedido</th><th>Fecha</th><th>Cliente</th>
+              <th>Total venta</th><th>Utilidad</th><th>Margen</th>
+            </tr>
+          </thead>
+          <tbody id="reporte-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="empty-reporte" class="empty-state" style="display:none">
+      <div class="empty-icon">📊</div>
+      <p>No hay pedidos confirmados en ese rango de fechas</p>
+    </div>
+
+  </div>
+</div>
+
+<script>
+let reporteData = null;
+
+// ── Helpers de fecha ──────────────────────────────────────────
+function hoyISO() { return new Date().toISOString().slice(0,10); }
+
+function setHoy() {
+  document.getElementById("f-desde").value = hoyISO();
+  document.getElementById("f-hasta").value = hoyISO();
+  loadReporte();
+}
+
+function setMesActual() {
+  const hoy   = new Date();
+  const desde = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  document.getElementById("f-desde").value = desde.toISOString().slice(0,10);
+  document.getElementById("f-hasta").value = hoyISO();
+  loadReporte();
+}
+
+function setSemana() {
+  const hoy   = new Date();
+  const lunes = new Date(hoy);
+  lunes.setDate(hoy.getDate() - ((hoy.getDay() + 6) % 7));
+  document.getElementById("f-desde").value = lunes.toISOString().slice(0,10);
+  document.getElementById("f-hasta").value = hoyISO();
+  loadReporte();
+}
+
+function setUltimos7() {
+  const desde = new Date();
+  desde.setDate(desde.getDate() - 6);
+  document.getElementById("f-desde").value = desde.toISOString().slice(0,10);
+  document.getElementById("f-hasta").value = hoyISO();
+  loadReporte();
+}
+
+function setUltimos30() {
+  const desde = new Date();
+  desde.setDate(desde.getDate() - 29);
+  document.getElementById("f-desde").value = desde.toISOString().slice(0,10);
+  document.getElementById("f-hasta").value = hoyISO();
+  loadReporte();
+}
+
+// ── Cargar reporte ────────────────────────────────────────────
+async function loadReporte() {
+  const desde = document.getElementById("f-desde").value;
+  const hasta = document.getElementById("f-hasta").value;
+  if (!desde || !hasta) { toast("Selecciona las fechas", "warn"); return; }
+
+  try {
+    const r = await apiFetch(`/reporte/utilidad?desde=${desde}&hasta=${hasta}`);
+    reporteData = r;
+
+    document.getElementById("r-ventas").textContent   = fmtMoney(r.total_ventas);
+    document.getElementById("r-utilidad").textContent = fmtMoney(r.total_utilidad);
+    document.getElementById("r-margen").textContent   = r.margen_promedio + "%";
+    document.getElementById("resumen-grid").style.display = "grid";
+
+    if (r.pedidos.length === 0) {
+      document.getElementById("tabla-card").style.display    = "none";
+      document.getElementById("export-bar").style.display    = "none";
+      document.getElementById("empty-reporte").style.display = "block";
+      return;
+    }
+
+    document.getElementById("tabla-card").style.display    = "block";
+    document.getElementById("export-bar").style.display    = "flex";
+    document.getElementById("empty-reporte").style.display = "none";
+    document.getElementById("export-info").textContent     = r.pedidos.length + " pedidos encontrados";
+
+    const tbody = document.getElementById("reporte-tbody");
+    tbody.innerHTML = r.pedidos.map(p => {
+      const cls = p.margen >= 20 ? "text-accent" : p.margen >= 10 ? "text-warn" : "text-danger";
+      return `<tr>
+        <td class="mono">#${p.pedido_id}</td>
+        <td>${p.fecha}</td>
+        <td>${p.cliente}</td>
+        <td class="mono">${fmtMoney(p.total)}</td>
+        <td class="mono text-accent">${fmtMoney(p.utilidad_total)}</td>
+        <td class="mono ${cls}">${p.margen}%</td>
+      </tr>`;
+    }).join("");
+
+    tbody.innerHTML += `
+      <tr style="border-top:2px solid var(--accent);background:var(--bg3)">
+        <td colspan="3"><strong>TOTAL</strong></td>
+        <td class="mono"><strong>${fmtMoney(r.total_ventas)}</strong></td>
+        <td class="mono text-accent"><strong>${fmtMoney(r.total_utilidad)}</strong></td>
+        <td class="mono text-warn"><strong>${r.margen_promedio}%</strong></td>
+      </tr>`;
+
+  } catch(e) { toast(e.message, "error"); }
+}
+
+// ── Exportar CSV ──────────────────────────────────────────────
+function exportarCSV() {
+  if (!reporteData) { toast("Genera el reporte primero", "warn"); return; }
+
+  const desde = document.getElementById("f-desde").value;
+  const hasta = document.getElementById("f-hasta").value;
+
+  const lineas = [
+    ["BodegaOS — Reporte de Utilidad"],
+    [`Período: ${desde} al ${hasta}`],
+    [`Generado: ${new Date().toLocaleString("es-PE")}`],
+    [],
+    [`Total ventas:`, `S/ ${reporteData.total_ventas.toFixed(2)}`],
+    [`Total utilidad:`, `S/ ${reporteData.total_utilidad.toFixed(2)}`],
+    [`Margen promedio:`, `${reporteData.margen_promedio}%`],
+    [],
+    ["Pedido", "Fecha", "Cliente", "Total Venta (S/)", "Utilidad (S/)", "Margen (%)"],
+  ];
+
+  reporteData.pedidos.forEach(p => {
+    lineas.push([
+      `#${p.pedido_id}`, p.fecha, p.cliente,
+      p.total.toFixed(2), p.utilidad_total.toFixed(2), p.margen + "%",
+    ]);
+  });
+
+  lineas.push([]);
+  lineas.push([
+    "TOTAL", "", "",
+    reporteData.total_ventas.toFixed(2),
+    reporteData.total_utilidad.toFixed(2),
+    reporteData.margen_promedio + "%",
+  ]);
+
+  const csv  = lineas.map(f => f.map(c => `"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = `reporte_utilidad_${desde}_${hasta}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast("CSV descargado ✓");
+}
+
+// ── Exportar PDF ──────────────────────────────────────────────
+function exportarPDF() {
+  if (!reporteData) { toast("Genera el reporte primero", "warn"); return; }
+
+  const desde = document.getElementById("f-desde").value;
+  const hasta = document.getElementById("f-hasta").value;
+
+  const ventana = window.open("", "_blank");
+  ventana.document.write(`<!DOCTYPE html><html><head>
+    <meta charset="UTF-8"/>
+    <title>Reporte Utilidad — BodegaOS</title>
+    <style>
+      *{box-sizing:border-box;margin:0;padding:0}
+      body{font-family:Arial,sans-serif;font-size:12px;color:#1a1a1a;padding:30px}
+      h1{font-size:20px;color:#1a7a4a;margin-bottom:4px}
+      .sub{font-size:11px;color:#666;margin-bottom:20px}
+      .resumen{display:flex;gap:16px;margin-bottom:20px}
+      .res-card{border:1px solid #ddd;border-radius:6px;padding:12px 18px;flex:1}
+      .res-card .label{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:1px}
+      .res-card .value{font-size:18px;font-weight:bold;color:#1a7a4a;margin-top:4px}
+      table{width:100%;border-collapse:collapse}
+      thead th{background:#1a7a4a;color:#fff;padding:8px 10px;text-align:left;font-size:11px}
+      tbody tr:nth-child(even){background:#f5f5f5}
+      tbody td{padding:7px 10px;border-bottom:1px solid #eee}
+      .total-row{background:#e8f5ee!important;font-weight:bold;border-top:2px solid #1a7a4a}
+      .footer{margin-top:20px;font-size:10px;color:#aaa;text-align:center}
+      @media print{body{padding:15px}}
+    </style>
+  </head><body>
+    <h1>BodegaOS — Reporte de Utilidad</h1>
+    <div class="sub">Período: ${desde} al ${hasta} &nbsp;|&nbsp; Generado: ${new Date().toLocaleString("es-PE")}</div>
+    <div class="resumen">
+      <div class="res-card"><div class="label">Total ventas</div><div class="value">S/ ${reporteData.total_ventas.toFixed(2)}</div></div>
+      <div class="res-card"><div class="label">Total utilidad</div><div class="value">S/ ${reporteData.total_utilidad.toFixed(2)}</div></div>
+      <div class="res-card"><div class="label">Margen promedio</div><div class="value">${reporteData.margen_promedio}%</div></div>
+    </div>
+    <table>
+      <thead><tr><th>Pedido</th><th>Fecha</th><th>Cliente</th><th>Total venta</th><th>Utilidad</th><th>Margen</th></tr></thead>
+      <tbody>
+        ${reporteData.pedidos.map(p=>`
+          <tr>
+            <td>#${p.pedido_id}</td><td>${p.fecha}</td><td>${p.cliente}</td>
+            <td>S/ ${p.total.toFixed(2)}</td>
+            <td>S/ ${p.utilidad_total.toFixed(2)}</td>
+            <td>${p.margen}%</td>
+          </tr>`).join("")}
+        <tr class="total-row">
+          <td colspan="3">TOTAL</td>
+          <td>S/ ${reporteData.total_ventas.toFixed(2)}</td>
+          <td>S/ ${reporteData.total_utilidad.toFixed(2)}</td>
+          <td>${reporteData.margen_promedio}%</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="footer">BodegaOS v2.0.0 — Sistema de gestión de bodega</div>
+  </body></html>`);
+
+  ventana.document.close();
+  ventana.focus();
+  setTimeout(() => { ventana.print(); ventana.close(); }, 500);
+  toast("PDF listo para imprimir ✓");
+}
+
+// ── Init ──────────────────────────────────────────────────────
+setMesActual();
+</script>
+</body>
+</html>
