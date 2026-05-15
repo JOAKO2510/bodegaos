@@ -1,6 +1,6 @@
 // BodegaOS — utilidades compartidas
 
-const API = "http://127.0.0.1:8000/api";
+const API = "https://bodegaos.onrender.com/api";
 
 // ── Fetch helper ──────────────────────────────────────────
 async function apiFetch(path, options = {}) {

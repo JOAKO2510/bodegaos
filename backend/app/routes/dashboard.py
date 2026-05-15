@@ -70,7 +70,7 @@ def dashboard(db: Session = Depends(get_db)):
         .filter(Pedido.estado.in_(["confirmado", "entregado"]))
         .group_by(Producto.id)
         .order_by(func.sum(DetallePedido.cantidad).desc())
-        .limit(5).all()
+        .limit(6).all()
     )
     top_productos = [{"nombre": r[0], "total_vendido": r[1]} for r in top_raw]
 
@@ -86,7 +86,7 @@ def dashboard(db: Session = Depends(get_db)):
         .filter(Pedido.estado.in_(["confirmado", "entregado"]))
         .group_by(Producto.id)
         .order_by(func.sum(DetallePedido.utilidad_subtotal).desc())
-        .limit(5).all()
+        .limit(6).all()
     )
     top_rentables = [
         {"nombre": r[0], "utilidad_total": round(float(r[1] or 0), 2), "unidades": r[2]}
